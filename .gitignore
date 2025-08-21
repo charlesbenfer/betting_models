@@ -1,0 +1,257 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables and API keys
+.env
+.env.local
+.env.production
+.env.development
+*.key
+*_api_key*
+api_keys.txt
+secrets.json
+config.ini
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Data files and databases
+data/
+*.db
+*.sqlite
+*.sqlite3
+matchup_database.db
+weather_data.db
+
+# Large data files
+*.parquet
+*.csv
+*.json
+*.pkl
+*.pickle
+*.h5
+*.hdf5
+
+# Cached data
+cache/
+cached_data/
+*.cache
+temp/
+tmp/
+
+# Model files
+saved_models*/
+models/
+*.joblib
+*.pkl
+model_*.json
+*.h5
+*.pb
+
+# Logs
+logs/
+*.log
+*.out
+*.err
+
+# Test coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Documentation builds
+docs/_build/
+.readthedocs.yml
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+.coverage
+.pytest_cache/
+.testmondata
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# Betting-specific sensitive files
+betting_records.csv
+portfolio_history.json
+bankroll_tracker.db
+bet_history/
+winnings.csv
+losses.csv
+personal_betting_data/
+
+# Analysis results (may contain sensitive performance data)
+comparative_analysis_results*.json
+backtest_results/
+performance_analysis/
+profit_loss_reports/
+
+# API response caches (may contain personal data)
+odds_cache/
+statcast_cache/
+weather_cache/
+api_responses/
+
+# Personal configuration
+personal_config.py
+my_settings.json
+user_preferences.json
+
+# Backup files
+*.bak
+*.backup
+*_backup.*
+backup_*/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Large output files
+output/
+results/
+plots/
+charts/
+
+# Local development
+local_testing/
+sandbox/
+experiments/
+scratch/
+
+# Dependencies that might be added locally
+node_modules/
+*.lock
+
+# Competition or proprietary data
+proprietary_data/
+competition_data/
+private_datasets/
+
+# Personal notes and documentation
+notes.md
+TODO.md
+personal_notes/
+strategy_notes.md
+
+# Financial data
+financial_records/
+tax_documents/
+revenue_tracking/
+
+# System-specific
+.idea/
+.vscode/settings.json
+*.sublime-*
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Keep important files (negative patterns)
+!requirements.txt
+!README.md
+!.gitignore
+!config.py
+!main.py
+
+# But ignore any config files with sensitive data
+config_local.py
+config_production.py
+config_*.json
+
+# Ignore compiled models but keep training scripts
+*.model
+*.weights
+
+# Ignore large analysis outputs
+large_analysis_*
+multi_year_analysis/
+historical_backtests/
+
+# Database files
+*.db-journal
+*.db-wal
+*.db-shm
