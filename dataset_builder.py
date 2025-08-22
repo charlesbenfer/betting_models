@@ -20,6 +20,7 @@ from feature_engineering import (
     BatterPitcherMatchupCalculator
 )
 from optimize_enhanced_features import patch_enhanced_features
+from optimize_recent_form import patch_recent_form_features
 from situational_features import SituationalFeatureCalculator
 from weather_features import WeatherFeatureCalculator
 from recent_form_features import RecentFormCalculator
@@ -68,9 +69,11 @@ class PregameDatasetBuilder:
         
         # Apply optimizations for large datasets
         patch_enhanced_features()
+        patch_recent_form_features()
         
         logger.info(f"Dataset builder initialized: {self.start_date} → {self.end_date}")
         logger.info("✅ Enhanced features optimized for large datasets")
+        logger.info("✅ Recent form features optimized for large datasets")
     
     def build_dataset(self, force_rebuild: bool = False, 
                      cache_format: str = "parquet") -> pd.DataFrame:
