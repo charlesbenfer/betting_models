@@ -29,51 +29,62 @@ Advanced feature engineering pipeline for MLB home run prediction with comprehen
 - `temporal_fatigue_features.py` - Time-based factors
 - `feature_interactions.py` - Feature combinations
 
-### Production Tools
-- `live_prediction_system.py` - Real-time prediction API
+### Prediction & Analysis Tools
+- `api_client.py` - External data integration (odds, weather)
+- `prediction_data_builder.py` - Prediction dataset construction
 - `betting_utils.py` - Bankroll and risk management
-- `bet_tracker.py` - Performance tracking
-- `api_client.py` - External data integration
 
 ### Performance Optimization
 - `optimize_enhanced_features.py` - Enhanced feature optimization (O(n²) → O(n))
 - `optimize_recent_form_improved.py` - Recent form optimization (10-20x speedup)
 - **Performance Gains**: 50-70% faster execution, 4-year analysis reduced from 6-8 hours to 3-4 hours
 
-### Utilities
+### Core Infrastructure
+- `fetch_recent_data.py` - **Daily data fetching (Step 1 of workflow)**
+- `live_prediction_system.py` - **Live predictions (Step 2 of workflow)**
 - `data_utils.py` - Data handling utilities
 - `weather_scraper.py` - Weather data collection
 - `matchup_database.py` - Historical matchup tracking
-- `unified_features.py` - Feature aggregation
-- `inference_features.py` - Production inference
 
-### Organized Directories
-- `tests/` - All test files (test_*.py)
-- `scripts/` - Utility scripts (fix_*.py, generate_*.py, etc.)
-- `docs/` - Documentation (*.md files)
-- `archives/` - Archived/debug files
-- `backups/` - Configuration backups
-- `outputs/` - Results and logs
-- `images/` - Generated visualizations
+### Essential Directories
 - `data/` - Datasets and cached data
 - `saved_models_pregame/` - Trained model artifacts
+- `config/` - Configuration files
+- `archived_dev/` - Development tools, tests, documentation, analysis scripts
 
-## 🚀 Quick Start
+## 🚀 Daily Production Workflow
 
-### Run Comparative Analysis
+### Step 1: Update Data (Morning - Once per day)
 ```bash
-python comparative_analysis.py --use-cache  # Use cached data
-python comparative_analysis.py             # Fresh rebuild
+python fetch_recent_data.py
 ```
+*Pulls fresh MLB data from last 45 days with all 255+ feature engineering*
 
-### Test Live Predictions
+### Step 2: Generate Predictions (Throughout day - Multiple times)
 ```bash
+# Basic predictions with default thresholds
 python live_prediction_system.py
+
+# Conservative betting opportunities  
+python live_prediction_system.py --min-ev 0.05 --min-confidence 0.70
+
+# More aggressive opportunities
+python live_prediction_system.py --min-ev 0.02 --min-confidence 0.60
 ```
 
-### Feature Analysis
+### Suggested Daily Schedule
 ```bash
-python analyze_features.py
+# 7:00 AM - Update data
+python fetch_recent_data.py
+
+# 8:00 AM - Morning predictions
+python live_prediction_system.py --min-ev 0.05 --min-confidence 0.70
+
+# 12:00 PM - Midday check  
+python live_prediction_system.py --min-ev 0.03 --min-confidence 0.65
+
+# 4:00 PM - Pre-game final check
+python live_prediction_system.py --min-ev 0.02 --min-confidence 0.60
 ```
 
 ## 📊 Project Evolution & Results
@@ -108,9 +119,23 @@ python analyze_features.py
 - **Cross-validation**: TimeSeriesSplit for temporal data integrity
 - **Feature validation**: Systematic checks for constants, correlations, and leakage
 
-## 🎯 Current Status & Next Steps
-- ✅ **Model Performance**: 91% ROC-AUC achieved and validated
-- ✅ **Production Optimization**: Sub-second inference times
-- ✅ **Data Integrity**: Comprehensive leakage prevention measures
-- 🎯 **Live Deployment**: Ready for production betting applications
-- 🎯 **Risk Management**: Integration with bankroll management systems
+## 🎯 Getting Started
+
+### For New Users (Fork & Setup)
+See `SETUP_GUIDE_FOR_FORKS.md` for complete setup instructions including:
+- Environment setup and API configuration
+- Model training with `comparative_analysis.py` (achieves 91% ROC-AUC)
+- Daily workflow setup
+
+### For Development
+Development tools, tests, and analysis scripts are in `archived_dev/`:
+- `archived_dev/comparative_analysis.py` - Complete model training pipeline
+- `archived_dev/tests/` - Comprehensive test suite
+- `archived_dev/docs/` - Detailed documentation
+- `archived_dev/scripts/` - Utility and analysis scripts
+
+## 🎯 Current Status
+- ✅ **Production Ready**: Streamlined 2-step daily workflow
+- ✅ **High Performance**: 91% ROC-AUC with optimized feature engineering
+- ✅ **Data Integrity**: Comprehensive temporal safeguards prevent leakage
+- ✅ **Scalable**: O(n) complexity optimizations for large datasets

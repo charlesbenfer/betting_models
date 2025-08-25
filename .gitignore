@@ -193,6 +193,11 @@ results/
 plots/
 charts/
 
+# Specific large files in this repo
+baseball_hr.log
+*.log
+comparative_analysis_results*.json
+
 # Local development
 local_testing/
 sandbox/
