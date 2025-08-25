@@ -192,10 +192,11 @@ class BettingAnalyzer:
     """Analyze betting opportunities and generate recommendations."""
     
     def __init__(self, min_ev: float = 0.05, min_probability: float = 0.06, 
-                 max_kelly: float = 0.25):
+                 max_kelly: float = 0.25, min_confidence: float = 0.0):
         self.min_ev = min_ev
         self.min_probability = min_probability
         self.max_kelly = max_kelly
+        self.min_confidence = min_confidence
         self.validator = DataValidator()
     
     def standardize_name(self, name):
@@ -252,7 +253,7 @@ class BettingAnalyzer:
                 merged = pred_df.copy()
                 merged['odds_hr_yes'] = np.nan
                 merged['odds_hr_no'] = np.nan
-                merged['bookmaker'] = 'Unknown'
+                merged['bookmaker'] = 'No Odds Available'
                 return merged
             
             odds_clean = odds_df.copy()
@@ -267,7 +268,7 @@ class BettingAnalyzer:
                 merged = pred_df.copy()
                 merged['odds_hr_yes'] = np.nan
                 merged['odds_hr_no'] = np.nan
-                merged['bookmaker'] = 'Unknown'
+                merged['bookmaker'] = 'Missing Required Columns'
                 return merged
             
             # Standardize odds DataFrame
@@ -290,6 +291,18 @@ class BettingAnalyzer:
             if 'odds_hr_yes_odds' in merged.columns:
                 merged['odds_hr_yes'] = merged['odds_hr_yes_odds']
                 merged = merged.drop(columns=['odds_hr_yes_odds'])
+            
+            # Ensure bookmaker column is preserved
+            if 'bookmaker' not in merged.columns and 'bookmaker' in odds_clean.columns:
+                # If bookmaker wasn't merged properly, add it back
+                merged = merged.merge(
+                    odds_clean[['batter_name', 'date', 'bookmaker']].drop_duplicates(),
+                    on=['batter_name', 'date'],
+                    how='left',
+                    suffixes=('', '_book')
+                )
+            elif 'bookmaker' not in merged.columns:
+                merged['bookmaker'] = 'Unknown'
             
             logger.info(f"Merged DataFrame shape: {merged.shape}")
             
@@ -449,6 +462,11 @@ class BettingAnalyzer:
                 except Exception as e:
                     logger.warning(f"Failed to create opportunity for {row.get('batter_name', 'Unknown')}: {e}")
                     continue
+            
+            # Filter by confidence score
+            if self.min_confidence > 0:
+                opportunities = [opp for opp in opportunities if opp.confidence_score >= self.min_confidence]
+                logger.info(f"Filtered to {len(opportunities)} opportunities meeting confidence threshold {self.min_confidence}")
             
             # Sort by EV descending
             opportunities.sort(key=lambda x: x.expected_value, reverse=True)

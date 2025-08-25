@@ -1,0 +1,100 @@
+MLB Home Run Prediction System - Production Files Reference
+===========================================================
+
+Generated: 2025-08-25
+Purpose: Reference for necessary vs unnecessary files for daily production workflow
+
+Daily Production Workflow:
+1. python fetch_recent_data.py (pull fresh MLB data)
+2. python live_prediction_system.py (generate predictions)
+
+NECESSARY FILES FOR PRODUCTION (Keep in Root Directory)
+======================================================
+
+Main Entry Points:
+- fetch_recent_data.py - Daily data fetching
+- live_prediction_system.py - Live predictions
+
+Core System Files:
+- config.py - Configuration management
+- dataset_builder.py - Dataset construction pipeline
+- modeling.py - Model training/loading system
+- api_client.py - External API integration
+- prediction_data_builder.py - Prediction dataset building
+- betting_utils.py - Betting analysis & opportunities
+- data_utils.py - Data validation & utilities
+
+Feature Engineering Pipeline (All Required):
+- feature_engineering.py - Core feature engineering
+- optimize_enhanced_features.py - Performance optimization
+- optimize_recent_form_improved.py - Performance optimization
+- enhanced_features.py - Matchup & similarity features
+- situational_features.py - Game context features
+- weather_features.py - Weather impact analysis
+- recent_form_features.py - Player form tracking
+- streak_momentum_features.py - Performance trends
+- ballpark_features.py - Park-specific adjustments
+- temporal_fatigue_features.py - Time-based factors
+- feature_interactions.py - Feature combinations
+
+Production Infrastructure:
+- weather_scraper.py - Weather data collection
+- matchup_database.py - Historical matchup tracking
+
+Essential Directories:
+- data/ - All cached datasets (pregame, weather, statcast)
+- saved_models_pregame/ - Trained model artifacts
+- config/ - Configuration files
+- requirements.txt - Python dependencies
+
+UNNECESSARY FILES (Moved to archived_dev/)
+==========================================
+
+Development & Testing:
+- tests/ - All 20 test files (keep for dev, not needed for daily workflow)
+- test_*.py - All individual test files (7 files)
+- comparative_analysis.py - Model evaluation (already done)
+
+Analysis & Debugging:
+- analyze_features.py - Feature analysis
+- model_testing.py - Model testing utilities
+- debug_odds.py - Debug utilities
+- demo_*.py - Demo scripts (2 files)
+- fix_model_predictions.py - Debugging utility
+
+Archive & Backup:
+- archives/ - All archived files (3 files)
+- backup/ - Backup utilities (2 files)
+- backups/ - Config backups (1 file)
+
+Documentation & Scripts:
+- docs/ - All documentation (10 files)
+- scripts/ - All utility scripts (13 files)
+- monitoring/ - Monitoring utilities (5 files)
+- security/ - Security utilities (2 files)
+- README.md - Documentation
+- readme - Duplicate documentation
+
+Calibration & Production Tools:
+- calibrate_*.py - Model calibration (2 files)
+- production_api_setup.py - Production setup
+- main.py - Alternative entry point
+- bet_tracker.py - Bet tracking utilities
+- historical_data_manager.py - Data management
+- inference_features.py - Inference utilities
+- unified_features.py - Feature unification
+
+Misc Utilities:
+- outputs/ - Analysis outputs
+- logs/ - Log files
+- images/ - Generated visualizations
+
+Summary:
+- NECESSARY: ~25 files + directories (core system)
+- UNNECESSARY: ~61 files + directories (development/analysis)
+- For daily production workflow, you only need about 30% of current files
+
+Notes:
+- Archived files are valuable for development, analysis, and debugging
+- They can be moved back to root directory if needed for development work
+- This archiving optimizes the directory for simple daily production use

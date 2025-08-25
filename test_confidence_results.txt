@@ -1,0 +1,175 @@
+🚀 Starting MLB Home Run Prediction System...
+2025-08-25 13:53:04,289 - modeling - INFO - Enhanced dual model system initialized: saved_models_pregame
+2025-08-25 13:53:04,289 - modeling - INFO - Splitting strategy: time_based
+2025-08-25 13:53:04,289 - api_client - INFO - Odds API client initialized successfully
+2025-08-25 13:53:04,289 - optimize_enhanced_features - INFO - ✅ Enhanced features optimized for large datasets
+2025-08-25 13:53:04,289 - optimize_recent_form_improved - INFO - ✅ Recent form features optimized (COMPLETE version with all 24 features)
+2025-08-25 13:53:04,289 - dataset_builder - INFO - Dataset builder initialized: 2023-03-01 → 2024-10-01
+2025-08-25 13:53:04,289 - dataset_builder - INFO - ✅ Enhanced features optimized for large datasets
+2025-08-25 13:53:04,289 - dataset_builder - INFO - ✅ Recent form features optimized for large datasets
+2025-08-25 13:53:04,289 - __main__ - INFO - Live prediction system initialized
+2025-08-25 13:53:04,289 - __main__ - INFO - Loading best model from comparative analysis...
+2025-08-25 13:53:04,572 - __main__ - INFO - ✅ Loaded LightGBM model
+2025-08-25 13:53:04,573 - __main__ - INFO -    ROC-AUC: 0.9022
+2025-08-25 13:53:04,573 - __main__ - INFO -    Features: 169
+2025-08-25 13:53:04,573 - __main__ - INFO -    Experiment: step7_temporal
+2025-08-25 13:53:04,573 - __main__ - INFO - Odds API available: True
+2025-08-25 13:53:04,573 - __main__ - INFO - Live prediction system ready
+📊 Settings: Min EV=0.1%, Min Confidence=500.0%
+📅 Analyzing games for 2025-08-25
+2025-08-25 13:53:04,573 - __main__ - INFO - Running full analysis for 2025-08-25
+2025-08-25 13:53:04,573 - __main__ - INFO - Generating predictions for analysis...
+2025-08-25 13:53:04,573 - __main__ - INFO - Generating predictions for 2025-08-25 using recent performance
+2025-08-25 13:53:04,573 - api_client - INFO - Fetching home run odds for 2025-08-25
+2025-08-25 13:53:04,743 - api_client - INFO - Fetched 27 MLB events
+2025-08-25 13:53:04,767 - api_client - INFO - Found 13 games for 2025-08-25
+2025-08-25 13:53:05,842 - api_client - INFO - Collected odds for 251 players
+2025-08-25 13:53:05,854 - __main__ - INFO - Found odds for 251 unique players
+2025-08-25 13:53:05,854 - prediction_data_builder - INFO - Found 18 pregame dataset files
+2025-08-25 13:53:05,868 - prediction_data_builder - INFO - Loaded 4574 records from pregame_dataset_2024-08-15_2024-08-31.parquet
+2025-08-25 13:53:05,878 - prediction_data_builder - INFO - Loaded 3784 records from pregame_dataset_2024-08-01_2024-08-15.parquet
+2025-08-25 13:53:05,892 - prediction_data_builder - INFO - Loaded 11152 records from pregame_dataset_recent_2025-08-24.parquet
+2025-08-25 13:53:05,906 - prediction_data_builder - INFO - Loaded 11151 records from pregame_dataset_2025-07-09_2025-08-23.parquet
+2025-08-25 13:53:05,923 - prediction_data_builder - INFO - Loaded 15414 records from pregame_dataset_2024-06-01_2024-07-31.parquet
+2025-08-25 13:53:06,042 - prediction_data_builder - INFO - Loaded 189422 records from pregame_dataset_2021-01-01_2024-08-31.parquet
+2025-08-25 13:53:06,058 - prediction_data_builder - INFO - Loaded 23630 records from pregame_dataset_2024-06-01_2024-08-31.parquet
+2025-08-25 13:53:06,070 - prediction_data_builder - INFO - Loaded 11251 records from pregame_dataset_2025-07-11_2025-08-25.parquet
+2025-08-25 13:53:06,081 - prediction_data_builder - INFO - Loaded 8216 records from pregame_dataset_2024-08-01_2024-08-31.parquet
+2025-08-25 13:53:06,092 - prediction_data_builder - INFO - Loaded 11251 records from pregame_dataset_recent_2025-08-25.parquet
+2025-08-25 13:53:06,104 - prediction_data_builder - INFO - Loaded 11251 records from pregame_dataset_latest.parquet
+2025-08-25 13:53:06,134 - prediction_data_builder - INFO - Loaded 39770 records from pregame_dataset_2024-04-01_2024-08-31.parquet
+2025-08-25 13:53:06,157 - prediction_data_builder - INFO - Loaded 11152 records from pregame_dataset_2025-07-10_2025-08-24.parquet
+2025-08-25 13:53:06,175 - prediction_data_builder - INFO - Loaded 4128 records from pregame_dataset_2024-09-01_2024-09-15.parquet
+2025-08-25 13:53:06,190 - prediction_data_builder - INFO - Loaded 15607 records from pregame_dataset_2024-07-01_2024-08-31.parquet
+2025-08-25 13:53:06,196 - prediction_data_builder - INFO - Loaded 694 records from pregame_dataset_2024-08-01_2024-08-03.parquet
+2025-08-25 13:53:06,210 - prediction_data_builder - INFO - Loaded 11151 records from pregame_dataset_recent_2025-08-23.parquet
+2025-08-25 13:53:06,222 - prediction_data_builder - INFO - Loaded 7899 records from pregame_dataset_2024-09-01_2024-10-31.parquet
+2025-08-25 13:53:06,483 - prediction_data_builder - INFO - Combined dataset: 391497 total records
+2025-08-25 13:53:06,491 - prediction_data_builder - INFO - Filtering data from 2025-07-10 to 2025-08-24
+2025-08-25 13:53:06,664 - prediction_data_builder - INFO - Recent dataset: 77793 records
+2025-08-25 13:53:06,785 - prediction_data_builder - WARNING - No recent data for Samuel Basallo
+2025-08-25 13:53:06,876 - prediction_data_builder - WARNING - No recent data for Vimael Machin
+2025-08-25 13:53:06,883 - prediction_data_builder - WARNING - No recent data for Jhostynxon Garcia
+2025-08-25 13:53:06,891 - prediction_data_builder - WARNING - No recent data for Carlos Narvaez
+2025-08-25 13:53:06,931 - prediction_data_builder - WARNING - No recent data for Michael Harris II
+2025-08-25 13:53:06,948 - prediction_data_builder - WARNING - No recent data for Ronald Acuna Jr.
+2025-08-25 13:53:06,975 - prediction_data_builder - WARNING - No recent data for Nacho Alvarez Jr.
+2025-08-25 13:53:07,054 - prediction_data_builder - WARNING - No recent data for Maximo Acosta
+2025-08-25 13:53:07,152 - prediction_data_builder - WARNING - No recent data for Jose Ramirez
+2025-08-25 13:53:07,162 - prediction_data_builder - WARNING - No recent data for Yandy Diaz
+2025-08-25 13:53:07,182 - prediction_data_builder - WARNING - No recent data for Angel Martinez
+2025-08-25 13:53:07,235 - prediction_data_builder - WARNING - No recent data for Carson Williams
+2025-08-25 13:53:07,334 - prediction_data_builder - WARNING - No recent data for Jazz Chisholm Jr.
+2025-08-25 13:53:07,398 - prediction_data_builder - WARNING - No recent data for Luis Garcia Jr.
+2025-08-25 13:53:07,427 - prediction_data_builder - WARNING - No recent data for Robert Hassell III
+2025-08-25 13:53:07,466 - prediction_data_builder - WARNING - No recent data for Jose Caballero
+2025-08-25 13:53:07,502 - prediction_data_builder - WARNING - No recent data for Vladimir Guerrero Jr.
+2025-08-25 13:53:07,591 - prediction_data_builder - WARNING - No recent data for Andres Gimenez
+2025-08-25 13:53:07,684 - prediction_data_builder - WARNING - No recent data for J.T. Realmuto
+2025-08-25 13:53:07,997 - prediction_data_builder - WARNING - No recent data for Lourdes Gurriel Jr.
+2025-08-25 13:53:08,022 - prediction_data_builder - WARNING - No recent data for Salvador Perez
+2025-08-25 13:53:08,031 - prediction_data_builder - WARNING - No recent data for Maikel Garcia
+2025-08-25 13:53:08,039 - prediction_data_builder - WARNING - No recent data for Bobby Witt Jr.
+2025-08-25 13:53:08,069 - prediction_data_builder - WARNING - No recent data for Luis Robert Jr.
+2025-08-25 13:53:08,132 - prediction_data_builder - WARNING - No recent data for Michael A. Taylor
+2025-08-25 13:53:08,188 - prediction_data_builder - WARNING - No recent data for Michael Massey
+2025-08-25 13:53:08,266 - prediction_data_builder - WARNING - No recent data for Ivan Herrera
+2025-08-25 13:53:08,326 - prediction_data_builder - WARNING - No recent data for Pedro Pages
+2025-08-25 13:53:08,371 - prediction_data_builder - WARNING - No recent data for Nathan Church
+2025-08-25 13:53:08,381 - prediction_data_builder - WARNING - No recent data for Jose Fermin
+2025-08-25 13:53:08,410 - prediction_data_builder - WARNING - No recent data for Adolis Garcia
+2025-08-25 13:53:08,562 - prediction_data_builder - WARNING - No recent data for Yoan Moncada
+2025-08-25 13:53:08,613 - prediction_data_builder - WARNING - No recent data for Eugenio Suarez
+2025-08-25 13:53:08,621 - prediction_data_builder - WARNING - No recent data for Julio Rodriguez
+2025-08-25 13:53:08,646 - prediction_data_builder - WARNING - No recent data for Fernando Tatis Jr.
+2025-08-25 13:53:08,675 - prediction_data_builder - WARNING - No recent data for Ramon Laureano
+2025-08-25 13:53:08,722 - prediction_data_builder - WARNING - No recent data for J.P. Crawford
+2025-08-25 13:53:08,732 - prediction_data_builder - WARNING - No recent data for Luis Arraez
+2025-08-25 13:53:08,750 - prediction_data_builder - WARNING - No recent data for Victor Robles
+2025-08-25 13:53:08,784 - prediction_data_builder - WARNING - No recent data for Javier Baez
+2025-08-25 13:53:08,837 - prediction_data_builder - WARNING - No recent data for Wenceel Perez
+2025-08-25 13:53:09,054 - prediction_data_builder - WARNING - No recent data for Teoscar Hernandez
+2025-08-25 13:53:09,124 - prediction_data_builder - WARNING - No recent data for Miguel Andujar
+2025-08-25 13:53:09,144 - prediction_data_builder - INFO - Built prediction dataset: 208 players
+2025-08-25 13:53:09,145 - __main__ - INFO - Making predictions for 208 players using LightGBM
+2025-08-25 13:53:09,147 - __main__ - INFO - Applied percentile calibration: avg 0.157 -> 0.143, range [0.080-0.325] -> [0.055-0.350]
+2025-08-25 13:53:09,148 - __main__ - INFO - Predictions generated successfully: 208 players
+2025-08-25 13:53:09,148 - __main__ - INFO - Fetching odds data...
+2025-08-25 13:53:09,148 - api_client - INFO - Fetching home run odds for 2025-08-25
+2025-08-25 13:53:09,227 - api_client - INFO - Fetched 27 MLB events
+2025-08-25 13:53:09,247 - api_client - INFO - Found 13 games for 2025-08-25
+2025-08-25 13:53:10,306 - api_client - INFO - Collected odds for 251 players
+2025-08-25 13:53:10,306 - __main__ - INFO - Analyzing betting opportunities...
+2025-08-25 13:53:10,306 - betting_utils - INFO - Merging predictions (shape: (208, 328)) with odds (shape: (251, 6))
+2025-08-25 13:53:10,307 - betting_utils - INFO - Odds already present in predictions DataFrame
+2025-08-25 13:53:10,315 - betting_utils - INFO - Identifying betting opportunities from 208 rows
+2025-08-25 13:53:10,315 - betting_utils - INFO - Using odds column: odds_hr_yes
+2025-08-25 13:53:10,316 - betting_utils - INFO - Found 104 candidates meeting criteria
+2025-08-25 13:53:10,319 - betting_utils - INFO - Filtered to 45 opportunities meeting confidence threshold 5.0
+2025-08-25 13:53:10,319 - betting_utils - INFO - Created 45 betting opportunities
+2025-08-25 13:53:10,319 - __main__ - INFO - Found 45 betting opportunities
+2025-08-25 13:53:10,324 - __main__ - INFO - 
+================================================================================
+2025-08-25 13:53:10,324 - __main__ - INFO - LIVE PREDICTION ANALYSIS - 2025-08-25
+2025-08-25 13:53:10,324 - __main__ - INFO - ================================================================================
+2025-08-25 13:53:10,324 - __main__ - INFO - 
+SUMMARY STATISTICS:
+2025-08-25 13:53:10,324 - __main__ - INFO -   Players with odds: 208
+2025-08-25 13:53:10,324 - __main__ - INFO -   Betting opportunities: 45
+2025-08-25 13:53:10,324 - __main__ - INFO -   Opportunity rate: 21.6%
+2025-08-25 13:53:10,324 - __main__ - INFO -   Average model probability: 14.3%
+2025-08-25 13:53:10,324 - __main__ - INFO -   Positive EV opportunities: 104
+2025-08-25 13:53:10,324 - betting_utils - INFO - 
+================================================================================
+2025-08-25 13:53:10,325 - betting_utils - INFO - TOP BETTING OPPORTUNITIES (EV >= 0.1%)
+2025-08-25 13:53:10,325 - betting_utils - INFO - ================================================================================
+2025-08-25 13:53:10,326 - betting_utils - INFO - 
+ Date             Player Model%  Odds     EV Kelly%  Fair           Book Conf
+08/25   Chandler Simpson   9.7% +2730 +1.739   6.4%  +933          fliff  7.0
+08/25        Sal Frelick  19.5% +1250 +1.627  13.0%  +414         betmgm  7.0
+08/25         Nick Allen   8.7% +2800 +1.514   5.4% +1054         betmgm  7.0
+08/25      Javier Sanoja  19.1% +1150 +1.390  12.1%  +423         betmgm  7.0
+08/25          Josh Jung  20.2% +1050 +1.328  12.6%  +394       ballybet  6.0
+08/25        Jeff McNeil  16.4% +1300 +1.302  10.0%  +508 williamhill_us  7.0
+08/25   Jurickson Profar  23.7%  +750 +1.016  13.6%  +322        fanduel  5.0
+08/25        Riley Adams  28.5%  +600 +0.996  16.6%  +251       ballybet  5.0
+08/25 Isiah Kiner-Falefa   6.1% +3000 +0.884   2.9% +1546    hardrockbet  5.0
+08/25      Alex Freeland  22.0%  +750 +0.873  11.6%  +354        fanduel  5.0
+08/25     Zach McKinstry  22.5%  +725 +0.855  11.8%  +345         betmgm  5.0
+08/25       Jared Triolo  15.6% +1060 +0.814   7.7%  +540        fanduel  7.0
+08/25       Ozzie Albies  19.5%  +800 +0.751   9.4%  +414        fanduel  7.0
+08/25       Bryson Stott  15.6% +1000 +0.720   7.2%  +540        espnbet  8.0
+08/25       Joc Pederson  22.8%  +650 +0.712  11.0%  +338       ballybet  6.0
+08/25       Rowdy Tellez  21.4%  +700 +0.709  10.1%  +368       ballybet  6.0
+08/25     Xavier Edwards  11.3% +1400 +0.689   4.9%  +788         betmgm  7.0
+08/25         Josh Smith  13.4% +1150 +0.673   5.9%  +647       ballybet  8.0
+08/25          CJ Abrams  24.7%  +575 +0.669  11.6%  +304       ballybet  6.0
+08/25       Gavin Sheets  23.4%  +600 +0.637  10.6%  +328        fanduel  5.0
+08/25   Ryan Mountcastle  18.1%  +800 +0.630   7.9%  +452         betmgm  7.0
+08/25    Spencer Horwitz  17.3%  +830 +0.610   7.3%  +478        fanduel  7.0
+08/25   Christian Yelich  22.3%  +600 +0.558   9.3%  +349       ballybet  5.0
+08/25 Vinnie Pasquantino  34.4%  +350 +0.550  15.7%  +190        fanduel  5.0
+08/25         Cole Young  11.0% +1300 +0.543   4.2%  +807 williamhill_us  7.0
+2025-08-25 13:53:10,326 - betting_utils - INFO - 
+================================================================================
+2025-08-25 13:53:10,326 - betting_utils - INFO - NEAR-MISS ANALYSIS (Closest to +EV)
+2025-08-25 13:53:10,326 - betting_utils - INFO - ================================================================================
+2025-08-25 13:53:10,328 - betting_utils - INFO - 
+ Date            Player Model%  Current   Fair  Need(0%)  Gap(0%)  Need(2%)  Gap(2%)
+08/25     Jack Suwinski  12.4%      700  706.0     706.0      6.0     708.0      8.0
+08/25  Gunnar Henderson  17.1%      470  484.0     484.0     14.0     486.0     16.0
+08/25    Darell Hernaiz   8.0%     1100 1151.0    1151.0     51.0    1153.0     53.0
+08/25      Adam Frazier   8.0%     1100 1151.0    1151.0     51.0    1153.0     53.0
+08/25      Miguel Rojas   8.0%     1100 1151.0    1151.0     51.0    1153.0     53.0
+08/25  Jackson Holliday  11.4%      725  778.0     778.0     53.0     780.0     55.0
+08/25     Nick Gonzales   7.4%     1200 1259.0    1259.0     59.0    1261.0     61.0
+08/25  Paul Goldschmidt  10.9%      750  815.0     815.0     65.0     817.0     67.0
+08/25     Colton Cowser  14.2%      540  605.0     605.0     65.0     607.0     67.0
+08/25      Kody Clemens  16.4%      440  508.0     508.0     68.0     510.0     70.0
+08/25        Otto Lopez  10.9%      750  821.0     821.0     71.0     823.0     73.0
+08/25 Spencer Torkelson  17.4%      400  474.0     474.0     74.0     476.0     76.0
+08/25     Manny Machado  17.1%      410  484.0     484.0     74.0     486.0     76.0
+08/25    Kyle Schwarber  21.7%      280  361.0     361.0     81.0     363.0     83.0
+08/25     Ernie Clement   8.0%     1060 1151.0    1151.0     91.0    1153.0     93.0
+
+💰 Found 45 betting opportunities!

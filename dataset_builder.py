@@ -20,7 +20,7 @@ from feature_engineering import (
     BatterPitcherMatchupCalculator
 )
 from optimize_enhanced_features import patch_enhanced_features
-from optimize_recent_form import patch_recent_form_features
+from optimize_recent_form_improved import patch_recent_form_features_complete
 from situational_features import SituationalFeatureCalculator
 from weather_features import WeatherFeatureCalculator
 from recent_form_features import RecentFormCalculator
@@ -69,7 +69,7 @@ class PregameDatasetBuilder:
         
         # Apply optimizations for large datasets
         patch_enhanced_features()
-        patch_recent_form_features()
+        patch_recent_form_features_complete()
         
         logger.info(f"Dataset builder initialized: {self.start_date} → {self.end_date}")
         logger.info("✅ Enhanced features optimized for large datasets")
@@ -430,7 +430,7 @@ class PregameDatasetBuilder:
         handedness_features = []
         for hand in ['R', 'L']:
             for metric in ['pa10', 'hr10', 'ev10', 'la10', 'pa30d', 'hr30d', 'hr_rate10', 'hr_rate30d']:
-                col = f'{metric}_{hand}'
+                col = f'{hand}_{metric}'  # Fixed: was f'{metric}_{hand}'
                 if col in df.columns:
                     handedness_features.append(col)
         

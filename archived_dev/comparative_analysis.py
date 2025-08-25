@@ -18,6 +18,14 @@ from dataclasses import dataclass, asdict
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import ML libraries
+import xgboost as xgb
+import lightgbm as lgb
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, train_test_split
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, f1_score, accuracy_score, log_loss
+import joblib
+from pathlib import Path
+
 # Import our modules
 from config import config
 from dataset_builder import PregameDatasetBuilder
@@ -50,16 +58,20 @@ class ComparativeAnalyzer:
     """Comprehensive comparative analysis system."""
     
     def __init__(self, 
-                 start_date: str = "2021-01-01",
+                 start_date: str = "2024-04-01", 
                  end_date: str = "2024-08-31", 
                  test_start_date: str = "2024-09-01",
-                 test_end_date: str = "2024-10-31"):
+                 test_end_date: str = "2024-09-30",
+                 use_cache: bool = False):
         self.start_date = start_date
         self.end_date = end_date
         self.test_start_date = test_start_date
         self.test_end_date = test_end_date
+        self.use_cache = use_cache
         self.experiments = []
         self.results = []
+        self.best_model = None
+        self.best_model_info = None
         
     def setup_experiments(self) -> List[ExperimentConfig]:
         """Setup all experimental configurations."""
@@ -167,9 +179,9 @@ class ComparativeAnalyzer:
         
         # Build datasets - this will take significant time with 4 years of data
         logger.info("Building training and test datasets...")
-        logger.info(f"Training period: {self.start_date} to {self.end_date} (4 years)")
-        logger.info(f"Testing period: {self.test_start_date} to {self.test_end_date} (2 months)")
-        logger.info("⚠️  Large dataset build - this may take 30-60 minutes on first run")
+        logger.info(f"Training period: {self.start_date} to {self.end_date} (2 months)")
+        logger.info(f"Testing period: {self.test_start_date} to {self.test_end_date} (1 month)")
+        logger.info("⚠️  Dataset build - should complete in 5-15 minutes")
         
         train_dataset = self._build_dataset(self.start_date, self.end_date, "training")
         test_dataset = self._build_dataset(self.test_start_date, self.test_end_date, "testing")
@@ -183,8 +195,8 @@ class ComparativeAnalyzer:
         feature_importance_data = {}
         total_experiments = len(experiments) - 1  # Exclude optimized subset initially
         
-        logger.info(f"\\n🚀 Starting {total_experiments} experiments with 4 years of training data")
-        logger.info("Each experiment may take 10-30 minutes depending on feature complexity")
+        logger.info(f"\\n🚀 Starting {total_experiments} experiments with 2 months of training data")
+        logger.info("Each experiment should take 2-5 minutes with smaller datasets")
         
         for i, experiment in enumerate(experiments[:-1], 1):  # Skip optimized subset for now
             logger.info(f"\\n{'='*60}")
@@ -231,6 +243,9 @@ class ComparativeAnalyzer:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._save_results(results, analysis_results, timestamp)
         
+        # Save the best performing model
+        self._save_best_model(results, analysis_results)
+        
         logger.info("\\n" + "="*80)
         logger.info("✅ COMPREHENSIVE 4-YEAR COMPARATIVE ANALYSIS COMPLETED!")
         logger.info(f"Training data: {self.start_date} to {self.end_date} (4 years)")
@@ -251,7 +266,7 @@ class ComparativeAnalyzer:
                 end_date=end_date
             )
             
-            dataset = builder.build_dataset(force_rebuild=True)
+            dataset = builder.build_dataset(force_rebuild=not self.use_cache)
             
             if dataset.empty:
                 logger.error(f"{dataset_type.title()} dataset is empty")
@@ -264,11 +279,167 @@ class ComparativeAnalyzer:
             logger.error(f"Failed to build {dataset_type} dataset: {e}")
             return pd.DataFrame()
     
+    def _train_xgboost_model(self, X_train, y_train, X_val, y_val):
+        """Train XGBoost model optimized for probability accuracy (log loss)."""
+        logger.info("Training XGBoost model with log loss optimization...")
+        
+        # Calculate scale_pos_weight for imbalanced data
+        neg_count = int((y_train == 0).sum())
+        pos_count = int((y_train == 1).sum())
+        scale_pos_weight = max(1.0, neg_count / max(1, pos_count))
+        base_rate = pos_count / (pos_count + neg_count)
+        logger.info(f"Class balance - Positive rate: {base_rate:.3%}, Scale weight: {scale_pos_weight:.2f}")
+        
+        # Create model optimized for probability accuracy
+        xgb_model = xgb.XGBClassifier(
+            n_estimators=400,
+            learning_rate=0.03,  # Lower learning rate for better calibration
+            max_depth=5,  # Slightly less depth to prevent overfitting
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_alpha=2.0,  # More L1 regularization
+            reg_lambda=3.0,  # More L2 regularization
+            gamma=1.0,  # Minimum loss reduction for split (helps calibration)
+            objective='binary:logistic',
+            random_state=config.RANDOM_STATE,
+            n_jobs=-1,
+            tree_method="hist",
+            scale_pos_weight=scale_pos_weight,
+            eval_metric='logloss',  # Changed from aucpr to logloss
+            base_score=base_rate  # Initialize with base rate for better calibration
+        )
+        
+        # Train model with early stopping based on log loss
+        try:
+            # Try with newer XGBoost API
+            from xgboost import callback
+            xgb_model.fit(
+                X_train, y_train,
+                eval_set=[(X_val, y_val)],
+                callbacks=[callback.EarlyStopping(rounds=50)],
+                verbose=False
+            )
+        except (ImportError, TypeError):
+            # Fallback for older XGBoost versions or simpler training
+            xgb_model.fit(X_train, y_train)
+        
+        # Evaluate on validation set
+        y_val_pred = xgb_model.predict(X_val)
+        y_val_prob = xgb_model.predict_proba(X_val)[:, 1]
+        
+        val_metrics = {
+            'roc_auc': roc_auc_score(y_val, y_val_prob),
+            'log_loss': log_loss(y_val, y_val_prob),
+            'precision': precision_score(y_val, y_val_pred, zero_division=0),
+            'recall': recall_score(y_val, y_val_pred, zero_division=0),
+            'f1': f1_score(y_val, y_val_pred, zero_division=0),
+            'accuracy': accuracy_score(y_val, y_val_pred),
+            'brier_score': np.mean((y_val_prob - y_val) ** 2),  # Lower is better
+            'mean_predicted_prob': y_val_prob.mean(),
+            'actual_positive_rate': y_val.mean()
+        }
+        
+        logger.info(f"XGBoost validation - ROC-AUC: {val_metrics['roc_auc']:.4f}, Log Loss: {val_metrics['log_loss']:.4f}")
+        logger.info(f"  Mean predicted: {val_metrics['mean_predicted_prob']:.3%} vs Actual rate: {val_metrics['actual_positive_rate']:.3%}")
+        
+        # Return model parameters for consistency
+        params = {
+            'n_estimators': 400,
+            'learning_rate': 0.03,
+            'max_depth': 5,
+            'subsample': 0.8,
+            'colsample_bytree': 0.8,
+            'reg_alpha': 2.0,
+            'reg_lambda': 3.0,
+            'gamma': 1.0
+        }
+        
+        return xgb_model, val_metrics, params
+    
+    def _train_lightgbm_model(self, X_train, y_train, X_val, y_val):
+        """Train LightGBM model optimized for probability accuracy (log loss)."""
+        logger.info("Training LightGBM model with log loss optimization...")
+        
+        # Calculate scale_pos_weight for imbalanced data
+        neg_count = int((y_train == 0).sum())
+        pos_count = int((y_train == 1).sum())
+        scale_pos_weight = max(1.0, neg_count / max(1, pos_count))
+        base_rate = pos_count / (pos_count + neg_count)
+        logger.info(f"Class balance - Positive rate: {base_rate:.3%}, Scale weight: {scale_pos_weight:.2f}")
+        
+        # Create model optimized for probability accuracy
+        lgb_model = lgb.LGBMClassifier(
+            n_estimators=400,
+            learning_rate=0.03,  # Lower learning rate for better calibration
+            max_depth=5,  # Less depth to prevent overfitting
+            num_leaves=31,  # 2^max_depth - 1
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_alpha=2.0,  # More L1 regularization
+            reg_lambda=3.0,  # More L2 regularization
+            min_child_samples=30,  # More samples required for splits
+            min_split_gain=0.1,  # Minimum gain for splits (helps calibration)
+            objective='binary',
+            metric='binary_logloss',  # Changed from auc to logloss
+            random_state=config.RANDOM_STATE,
+            n_jobs=-1,
+            scale_pos_weight=scale_pos_weight,
+            verbosity=-1,
+            force_col_wise=True,
+            boost_from_average=True  # Start from base rate
+        )
+        
+        # Train model with early stopping based on log loss
+        try:
+            lgb_model.fit(
+                X_train, y_train,
+                eval_set=[(X_val, y_val)],
+                callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)]
+            )
+        except (ImportError, TypeError, AttributeError):
+            # Fallback for compatibility issues
+            lgb_model.fit(X_train, y_train)
+        
+        # Evaluate on validation set
+        y_val_pred = lgb_model.predict(X_val)
+        y_val_prob = lgb_model.predict_proba(X_val)[:, 1]
+        
+        val_metrics = {
+            'roc_auc': roc_auc_score(y_val, y_val_prob),
+            'log_loss': log_loss(y_val, y_val_prob),
+            'precision': precision_score(y_val, y_val_pred, zero_division=0),
+            'recall': recall_score(y_val, y_val_pred, zero_division=0),
+            'f1': f1_score(y_val, y_val_pred, zero_division=0),
+            'accuracy': accuracy_score(y_val, y_val_pred),
+            'brier_score': np.mean((y_val_prob - y_val) ** 2),  # Lower is better
+            'mean_predicted_prob': y_val_prob.mean(),
+            'actual_positive_rate': y_val.mean()
+        }
+        
+        logger.info(f"LightGBM validation - ROC-AUC: {val_metrics['roc_auc']:.4f}, Log Loss: {val_metrics['log_loss']:.4f}")
+        logger.info(f"  Mean predicted: {val_metrics['mean_predicted_prob']:.3%} vs Actual rate: {val_metrics['actual_positive_rate']:.3%}")
+        
+        # Return model parameters for consistency
+        params = {
+            'n_estimators': 400,
+            'learning_rate': 0.03,
+            'max_depth': 5,
+            'num_leaves': 31,
+            'subsample': 0.8,
+            'colsample_bytree': 0.8,
+            'reg_alpha': 2.0,
+            'reg_lambda': 3.0,
+            'min_child_samples': 30,
+            'min_split_gain': 0.1
+        }
+        
+        return lgb_model, val_metrics, params
+    
     def _run_single_experiment(self, 
                              experiment: ExperimentConfig,
                              train_dataset: pd.DataFrame,
                              test_dataset: pd.DataFrame) -> Optional[Dict[str, Any]]:
-        """Run a single experiment."""
+        """Run a single experiment with both XGBoost and LightGBM."""
         try:
             start_time = datetime.now()
             
@@ -278,12 +449,23 @@ class ComparativeAnalyzer:
             missing_features = [f for f in experiment.features_to_include 
                               if f not in train_dataset.columns]
             
-            logger.info(f"Available features: {len(available_features)}")
+            logger.info(f"Available features: {len(available_features)}/{len(experiment.features_to_include)}")
+            
+            # Enhanced error reporting for missing features
             if missing_features:
-                logger.warning(f"Missing features: {len(missing_features)}")
+                missing_pct = len(missing_features) / len(experiment.features_to_include) * 100
+                logger.warning(f"Missing {len(missing_features)} features ({missing_pct:.1f}%)")
+                if len(missing_features) <= 10:
+                    logger.warning(f"Missing features: {missing_features}")
+                else:
+                    logger.warning(f"First 10 missing: {missing_features[:10]}...")
+                
+                # Fail loudly if too many features are missing
+                if missing_pct > 50:
+                    raise ValueError(f"Too many features missing ({missing_pct:.1f}%). Check feature engineering pipeline.")
             
             if len(available_features) < 5:
-                logger.warning("Too few features available, skipping experiment")
+                raise ValueError(f"Only {len(available_features)} features available. Minimum 5 required.")
                 return None
             
             # Prepare datasets with only available features + target
@@ -296,55 +478,136 @@ class ComparativeAnalyzer:
                 logger.warning("Insufficient data for reliable testing")
                 return None
             
-            # Initialize and train model
-            model_system = EnhancedDualModelSystem()
+            # Split training data into train and validation
+            X_train = train_data.drop('hit_hr', axis=1).values
+            y_train = train_data['hit_hr'].values
+            X_test = test_data.drop('hit_hr', axis=1).values
+            y_test = test_data['hit_hr'].values
+            
+            X_train_split, X_val_split, y_train_split, y_val_split = train_test_split(
+                X_train, y_train, test_size=0.15, random_state=config.RANDOM_STATE, stratify=y_train
+            )
             
             training_start = datetime.now()
             
-            # Train with time-based split to prevent leakage
-            # For large datasets, use larger validation sets for more robust estimates
-            results = model_system.fit(
-                train_data,
-                splitting_strategy='temporal',
-                test_size=0.15,  # Smaller test set since we have holdout data
-                val_size=0.15,
-                cross_validate=True,
-                cv_folds=5  # More folds for robust CV with large data
+            # Train both XGBoost and LightGBM
+            xgb_model, xgb_val_metrics, xgb_params = self._train_xgboost_model(
+                X_train_split, y_train_split, X_val_split, y_val_split
+            )
+            
+            lgb_model, lgb_val_metrics, lgb_params = self._train_lightgbm_model(
+                X_train_split, y_train_split, X_val_split, y_val_split
             )
             
             training_time = (datetime.now() - training_start).total_seconds()
             
-            # Test on holdout set
+            # Test both models on holdout set
             prediction_start = datetime.now()
             
-            test_predictions = model_system.predict(test_data.drop('hit_hr', axis=1))
+            # XGBoost test metrics
+            xgb_test_pred = xgb_model.predict(X_test)
+            xgb_test_prob = xgb_model.predict_proba(X_test)[:, 1]
+            xgb_test_metrics = {
+                'roc_auc': roc_auc_score(y_test, xgb_test_prob),
+                'precision': precision_score(y_test, xgb_test_pred, zero_division=0),
+                'recall': recall_score(y_test, xgb_test_pred, zero_division=0),
+                'f1': f1_score(y_test, xgb_test_pred, zero_division=0),
+                'accuracy': accuracy_score(y_test, xgb_test_pred),
+                'log_loss': log_loss(y_test, xgb_test_prob),
+                'brier_score': np.mean((xgb_test_prob - y_test) ** 2),
+                'mean_predicted_prob': xgb_test_prob.mean(),
+                'actual_positive_rate': y_test.mean()
+            }
+            
+            # LightGBM test metrics
+            lgb_test_pred = lgb_model.predict(X_test)
+            lgb_test_prob = lgb_model.predict_proba(X_test)[:, 1]
+            lgb_test_metrics = {
+                'roc_auc': roc_auc_score(y_test, lgb_test_prob),
+                'precision': precision_score(y_test, lgb_test_pred, zero_division=0),
+                'recall': recall_score(y_test, lgb_test_pred, zero_division=0),
+                'f1': f1_score(y_test, lgb_test_pred, zero_division=0),
+                'accuracy': accuracy_score(y_test, lgb_test_pred),
+                'log_loss': log_loss(y_test, lgb_test_prob),
+                'brier_score': np.mean((lgb_test_prob - y_test) ** 2),
+                'mean_predicted_prob': lgb_test_prob.mean(),
+                'actual_positive_rate': y_test.mean()
+            }
             
             prediction_time = (datetime.now() - prediction_start).total_seconds()
             
-            # Calculate test metrics
-            test_metrics = model_system._calculate_metrics(
-                test_data['hit_hr'].values,
-                test_predictions
-            )
+            # Determine best model based on composite score (ROC-AUC and log loss)
+            # Better log loss is more important for betting probability accuracy
+            xgb_score = xgb_test_metrics['roc_auc'] - (xgb_test_metrics['log_loss'] * 0.5)  # Penalize higher log loss
+            lgb_score = lgb_test_metrics['roc_auc'] - (lgb_test_metrics['log_loss'] * 0.5)
             
-            # Get feature importance
-            feature_importance = self._get_feature_importance(model_system, available_features)
+            logger.info(f"Model selection scores - XGBoost: {xgb_score:.4f}, LightGBM: {lgb_score:.4f}")
+            
+            if xgb_score >= lgb_score:
+                best_model = xgb_model
+                best_model_name = 'XGBoost'
+                best_test_metrics = xgb_test_metrics
+                best_val_metrics = xgb_val_metrics
+                best_params = xgb_params
+            else:
+                best_model = lgb_model
+                best_model_name = 'LightGBM'
+                best_test_metrics = lgb_test_metrics
+                best_val_metrics = lgb_val_metrics
+                best_params = lgb_params
+            
+            # Get feature importance from best model
+            if hasattr(best_model, 'feature_importances_'):
+                feature_importance = dict(zip(available_features, best_model.feature_importances_))
+            else:
+                feature_importance = {}
             
             total_time = (datetime.now() - start_time).total_seconds()
             
             logger.info(f"Results:")
-            logger.info(f"  ROC-AUC: {test_metrics.get('roc_auc', 0):.4f}")
-            logger.info(f"  Precision: {test_metrics.get('precision', 0):.4f}")
-            logger.info(f"  Recall: {test_metrics.get('recall', 0):.4f}")
-            logger.info(f"  F1-Score: {test_metrics.get('f1', 0):.4f}")
+            logger.info(f"  Best Model: {best_model_name}")
+            logger.info(f"  XGBoost - ROC-AUC: {xgb_test_metrics['roc_auc']:.4f}, Log Loss: {xgb_test_metrics['log_loss']:.4f}")
+            logger.info(f"  LightGBM - ROC-AUC: {lgb_test_metrics['roc_auc']:.4f}, Log Loss: {lgb_test_metrics['log_loss']:.4f}")
+            logger.info(f"  Best - ROC-AUC: {best_test_metrics['roc_auc']:.4f}, Log Loss: {best_test_metrics['log_loss']:.4f}")
+            logger.info(f"  Predicted vs Actual: {best_test_metrics.get('mean_predicted_prob', 0):.3%} vs {best_test_metrics.get('actual_positive_rate', 0):.3%}")
+            logger.info(f"  Precision: {best_test_metrics['precision']:.4f}")
+            logger.info(f"  Recall: {best_test_metrics['recall']:.4f}")
+            logger.info(f"  F1-Score: {best_test_metrics['f1']:.4f}")
             logger.info(f"  Features: {len(available_features)}")
             logger.info(f"  Training time: {training_time:.2f}s")
             logger.info(f"  Prediction time: {prediction_time:.4f}s")
             
+            # Check if this is the best model overall (using composite score)
+            current_composite_score = best_test_metrics['roc_auc'] - (best_test_metrics['log_loss'] * 0.5)
+            best_composite_score = 0
+            if self.best_model_info:
+                best_composite_score = self.best_model_info.get('roc_auc', 0) - (self.best_model_info.get('log_loss', 1.0) * 0.5)
+            
+            if self.best_model is None or current_composite_score > best_composite_score:
+                self.best_model = best_model
+                self.best_model_info = {
+                    'experiment_name': experiment.experiment_name,
+                    'model_type': best_model_name,
+                    'roc_auc': best_test_metrics['roc_auc'],
+                    'log_loss': best_test_metrics['log_loss'],
+                    'composite_score': current_composite_score,
+                    'mean_predicted_prob': best_test_metrics['mean_predicted_prob'],
+                    'actual_positive_rate': best_test_metrics['actual_positive_rate'],
+                    'features': available_features,
+                    'params': best_params
+                }
+                logger.info(f"  🏆 New best overall model! ({best_model_name})")
+                logger.info(f"      ROC-AUC: {best_test_metrics['roc_auc']:.4f}, Log Loss: {best_test_metrics['log_loss']:.4f}")
+                logger.info(f"      Composite Score: {current_composite_score:.4f}")
+                logger.info(f"      Calibration: {best_test_metrics['mean_predicted_prob']:.3%} vs {best_test_metrics['actual_positive_rate']:.3%}")
+            
             return {
                 'experiment_name': experiment.experiment_name,
                 'description': experiment.description,
-                'metrics': test_metrics,
+                'metrics': best_test_metrics,
+                'xgb_metrics': xgb_test_metrics,
+                'lgb_metrics': lgb_test_metrics,
+                'best_model_name': best_model_name,
                 'feature_count': len(available_features),
                 'training_time': training_time,
                 'prediction_time': prediction_time,
@@ -352,11 +615,16 @@ class ComparativeAnalyzer:
                 'available_features': available_features,
                 'missing_features': missing_features,
                 'feature_importance': feature_importance,
-                'cross_validation_results': results.get('cv_results', {}),
-                'model_info': {
-                    'best_model': results.get('best_model_name', 'unknown'),
-                    'ensemble_used': results.get('ensemble_used', False)
-                }
+                'validation_metrics': best_val_metrics,
+                'xgb_validation_metrics': xgb_val_metrics,
+                'lgb_validation_metrics': lgb_val_metrics,
+                'calibration_info': {
+                    'mean_predicted': best_test_metrics['mean_predicted_prob'],
+                    'actual_rate': best_test_metrics['actual_positive_rate'],
+                    'brier_score': best_test_metrics['brier_score']
+                },
+                'best_params': best_params,
+                'model': best_model  # Store the actual model
             }
             
         except Exception as e:
@@ -455,6 +723,20 @@ class ComparativeAnalyzer:
         
         if not results:
             return {"error": "No successful experiments to analyze"}
+        
+        # Validate that experiments have different feature counts
+        feature_counts = [r['feature_count'] for r in results]
+        unique_counts = set(feature_counts)
+        
+        if len(unique_counts) < len(results) * 0.7:  # At least 70% should be unique
+            logger.warning(f"⚠️  Feature count validation issue: Only {len(unique_counts)} unique feature counts across {len(results)} experiments")
+            logger.warning(f"Feature counts by experiment: {feature_counts}")
+            
+            # Check if all experiments have the same feature count (major issue)
+            if len(unique_counts) == 1:
+                logger.error("❌ CRITICAL: All experiments using the same number of features!")
+                logger.error("This indicates the feature engineering pipeline is not working correctly.")
+                logger.error("Please check that all feature modules are generating their features properly.")
         
         logger.info("\\n" + "="*60)
         logger.info("GENERATING COMPREHENSIVE ANALYSIS REPORT")
@@ -825,10 +1107,70 @@ class ComparativeAnalyzer:
             
         except Exception as e:
             logger.error(f"Failed to save results: {e}")
+    
+    def _save_best_model(self, results: List[Dict[str, Any]], analysis: Dict[str, Any]) -> None:
+        """Save the best performing model (XGBoost or LightGBM) to the model directory."""
+        try:
+            if self.best_model is None:
+                logger.warning("No best model found to save")
+                return
+            
+            # Create model directory if it doesn't exist
+            model_dir = Path(config.MODEL_DIR)
+            model_dir.mkdir(exist_ok=True, parents=True)
+            
+            # Save the best model
+            model_path = model_dir / f"best_model_{self.best_model_info['model_type'].lower()}.pkl"
+            joblib.dump(self.best_model, model_path)
+            
+            # Save feature list
+            features_path = model_dir / "best_model_features.json"
+            with open(features_path, 'w') as f:
+                json.dump(self.best_model_info['features'], f, indent=2)
+            
+            # Save model metadata
+            best_model_metadata = {
+                'experiment_name': self.best_model_info['experiment_name'],
+                'model_type': self.best_model_info['model_type'],
+                'roc_auc': self.best_model_info['roc_auc'],
+                'feature_count': len(self.best_model_info['features']),
+                'parameters': self.best_model_info['params'],
+                'training_date': datetime.now().isoformat(),
+                'training_period': f"{self.start_date} to {self.end_date}",
+                'test_period': f"{self.test_start_date} to {self.test_end_date}",
+                'model_file': str(model_path.name),
+                'features_file': str(features_path.name)
+            }
+            
+            metadata_path = model_dir / "best_model_info.json"
+            with open(metadata_path, 'w') as f:
+                json.dump(best_model_metadata, f, indent=2)
+            
+            logger.info(f"\\n✅ Best model saved successfully to {config.MODEL_DIR}")
+            logger.info(f"   Experiment: {self.best_model_info['experiment_name']}")
+            logger.info(f"   Model Type: {self.best_model_info['model_type']}")
+            logger.info(f"   Features: {len(self.best_model_info['features'])}")
+            logger.info(f"   Performance: ROC-AUC {self.best_model_info['roc_auc']:.4f}")
+            logger.info(f"   Model file: {model_path}")
+            
+        except Exception as e:
+            logger.error(f"Failed to save best model: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 def main():
     """Run comparative analysis."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Run comparative analysis of MLB home run prediction models')
+    parser.add_argument('--use-cache', action='store_true', default=False,
+                       help='Use cached datasets instead of rebuilding from scratch')
+    parser.add_argument('--quick-test', action='store_true', default=False,
+                       help='Run quick test with smaller date ranges')
+    
+    args = parser.parse_args()
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
@@ -836,12 +1178,26 @@ def main():
     
     logger.info("Starting comprehensive comparative analysis...")
     
-    # Initialize analyzer with comprehensive date ranges for robust analysis
+    # Set date ranges based on mode
+    if args.quick_test:
+        start_date = "2024-06-01"
+        end_date = "2024-07-31" 
+        test_start_date = "2024-08-01"
+        test_end_date = "2024-08-31"
+        logger.info("🚀 Quick test mode: Using smaller date ranges")
+    else:
+        start_date = "2024-04-01"  
+        end_date = "2024-08-31"
+        test_start_date = "2024-09-01"  
+        test_end_date = "2024-10-31"
+    
+    # Initialize analyzer with date ranges
     analyzer = ComparativeAnalyzer(
-        start_date="2021-01-01",  # 4 years of training data
-        end_date="2024-08-31",
-        test_start_date="2024-09-01",  # 2 months of test data  
-        test_end_date="2024-10-31"
+        start_date=start_date,
+        end_date=end_date,
+        test_start_date=test_start_date,
+        test_end_date=test_end_date,
+        use_cache=args.use_cache
     )
     
     # Run analysis

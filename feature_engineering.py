@@ -260,18 +260,21 @@ class HandednessSplitsCalculator:
             )
         
         # 30-day time-based rolling (lagged)
-        def _calc_30day_rolling(group, col):
-            group_indexed = group.set_index('date')
-            if col in ['pa', 'hr']:
-                return group_indexed[col].rolling('30D').sum().shift(1).reset_index(drop=True)
-            else:
-                return group_indexed[col].rolling('30D').mean().shift(1).reset_index(drop=True)
-        
         for col in feature_cols:
+            # Calculate 30-day rolling for each group
+            def calc_rolling(group):
+                group = group.sort_values('date')
+                group_indexed = group.set_index('date')
+                if col in ['pa', 'hr']:
+                    rolled = group_indexed[col].rolling('30D').sum().shift(1)
+                else:
+                    rolled = group_indexed[col].rolling('30D').mean().shift(1)
+                # Return as a series with the original index
+                return pd.Series(rolled.values, index=group.index)
+            
             aggregated[f'{col}30d'] = (
                 aggregated.groupby(['batter', 'p_throws'], group_keys=False)
-                .apply(lambda g: _calc_30day_rolling(g, col))
-                .values
+                .apply(calc_rolling)
             )
         
         # Calculate rates

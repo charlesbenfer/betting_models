@@ -255,3 +255,11 @@ historical_backtests/
 *.db-journal
 *.db-wal
 *.db-shm
+
+*.pem
+*.p12
+*.secret
+.env.staging
+config/secrets/
+backups/*.env
+*.pyc

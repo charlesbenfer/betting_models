@@ -8,14 +8,17 @@ Efficient system for generating live predictions and finding betting opportuniti
 import pandas as pd
 import numpy as np
 import logging
+import json
+import joblib
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from config import config
 from api_client import SafeAPIClient
-from dataset_builder import EfficientPredictionBuilder
-from modeling import DualModelSystem
+from dataset_builder import PregameDatasetBuilder
+from prediction_data_builder import PredictionDataBuilder
+from modeling import EnhancedDualModelSystem
 from betting_utils import BettingAnalyzer, BettingOpportunity
 from data_utils import DataValidator, CacheManager
 
@@ -27,11 +30,16 @@ class LivePredictionSystem:
     """
     
     def __init__(self, model_dir: str = None, api_key: str = None):
-        self.model_dir = model_dir or str(config.MODEL_DIR)
+        self.model_dir = Path(model_dir or str(config.MODEL_DIR))
         
         # Initialize components
-        self.model_system = DualModelSystem(self.model_dir)
+        self.best_model = None  # Will load the best model (XGBoost or LightGBM)
+        self.model_type = None  # Track which model type we're using
+        self.model_features = []  # Features required by the model
+        self.model_system = EnhancedDualModelSystem(str(self.model_dir))  # Keep for backward compatibility
+        
         self.api_client = SafeAPIClient(api_key)
+        self.prediction_builder = PredictionDataBuilder()
         self.betting_analyzer = BettingAnalyzer(
             min_ev=config.MIN_EV_THRESHOLD,
             min_probability=config.MIN_PROB_THRESHOLD
@@ -46,6 +54,75 @@ class LivePredictionSystem:
         
         logger.info("Live prediction system initialized")
     
+    def get_todays_data(self, target_date: str = None) -> pd.DataFrame:
+        """Get today's betting data (odds + predictions)."""
+        if target_date is None:
+            target_date = datetime.now().strftime("%Y-%m-%d")
+        
+        try:
+            # Get odds data
+            odds_df = self.api_client.get_todays_odds(target_date)
+            
+            if odds_df.empty:
+                logger.warning(f"No odds data available for {target_date}")
+                return pd.DataFrame()
+            
+            # Get predictions if models are loaded
+            if self.is_model_loaded:
+                predictions_df, _ = self.get_todays_predictions(target_date)
+                
+                # Merge odds with predictions
+                if not predictions_df.empty:
+                    merged = pd.merge(odds_df, predictions_df, 
+                                    left_on='batter_name', right_on='batter_name', 
+                                    how='left')
+                    return merged
+            
+            return odds_df
+            
+        except Exception as e:
+            logger.error(f"Failed to get today's data: {e}")
+            return pd.DataFrame()
+    
+    def find_betting_opportunities(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Find betting opportunities from prediction data."""
+        try:
+            if data.empty:
+                return pd.DataFrame()
+            
+            # Calculate expected value for betting opportunities
+            opportunities = []
+            
+            for _, row in data.iterrows():
+                if 'hr_probability' in row and 'odds_hr_yes' in row:
+                    model_prob = row.get('hr_probability', 0)
+                    odds_yes = row.get('odds_hr_yes', 0)
+                    
+                    if model_prob > 0 and odds_yes > 0:
+                        # Convert American odds to decimal
+                        if odds_yes > 0:
+                            decimal_odds = (odds_yes / 100) + 1
+                        else:
+                            decimal_odds = (100 / abs(odds_yes)) + 1
+                        
+                        # Calculate expected value
+                        expected_value = (model_prob * decimal_odds) - 1
+                        
+                        if expected_value > 0.05:  # 5% minimum EV
+                            opportunities.append({
+                                'batter_name': row.get('batter_name', 'Unknown'),
+                                'hr_probability': model_prob,
+                                'odds_hr_yes': odds_yes,
+                                'expected_value': expected_value,
+                                'decimal_odds': decimal_odds
+                            })
+            
+            return pd.DataFrame(opportunities)
+            
+        except Exception as e:
+            logger.error(f"Failed to find betting opportunities: {e}")
+            return pd.DataFrame()
+    
     def initialize(self) -> bool:
         """
         Initialize the system by loading models and validating APIs.
@@ -54,14 +131,50 @@ class LivePredictionSystem:
             True if initialization successful
         """
         try:
-            # Load trained models
-            logger.info("Loading trained models...")
-            self.model_system.load()
-            self.is_model_loaded = True
+            # Check for best model from comparative analysis
+            best_model_info_path = self.model_dir / "best_model_info.json"
             
-            # Log model information
-            model_info = self.model_system.get_model_info()
-            logger.info(f"Model system loaded: {model_info}")
+            if best_model_info_path.exists():
+                # Load the best model from comparative analysis
+                logger.info("Loading best model from comparative analysis...")
+                
+                with open(best_model_info_path, 'r') as f:
+                    model_info = json.load(f)
+                
+                self.model_type = model_info['model_type']
+                model_file = model_info['model_file']
+                
+                # Load the model
+                model_path = self.model_dir / model_file
+                if not model_path.exists():
+                    logger.error(f"Model file not found: {model_path}")
+                    logger.info("Falling back to dual model system...")
+                    self.model_system.load()
+                    self.model_type = "DualSystem"
+                else:
+                    self.best_model = joblib.load(model_path)
+                    
+                    # Load feature list
+                    features_path = self.model_dir / model_info['features_file']
+                    if features_path.exists():
+                        with open(features_path, 'r') as f:
+                            self.model_features = json.load(f)
+                    
+                    logger.info(f"✅ Loaded {self.model_type} model")
+                    logger.info(f"   ROC-AUC: {model_info['roc_auc']:.4f}")
+                    logger.info(f"   Features: {model_info['feature_count']}")
+                    logger.info(f"   Experiment: {model_info['experiment_name']}")
+            else:
+                # Fallback to old dual model system
+                logger.info("No best model found, loading dual model system...")
+                self.model_system.load()
+                self.model_type = "DualSystem"
+                
+                # Log model information
+                model_info = self.model_system.get_model_info()
+                logger.info(f"Model system loaded: {model_info}")
+            
+            self.is_model_loaded = True
             
             # Check API availability
             odds_available = self.api_client.is_odds_available()
@@ -75,7 +188,7 @@ class LivePredictionSystem:
     
     def get_todays_predictions(self, target_date: str = None, 
                               force_rebuild: bool = False, 
-                              model_name: str = 'rf') -> Tuple[pd.DataFrame, np.ndarray]:
+                              model_name: str = 'xgb') -> Tuple[pd.DataFrame, np.ndarray]:
         """
         Generate predictions for a specific date using recent player performance.
         
@@ -96,34 +209,58 @@ class LivePredictionSystem:
         logger.info(f"Generating predictions for {target_date} using recent performance")
         
         try:
-            # First, try to get today's odds to see which players we need predictions for
+            # First, get today's odds to see which players we need predictions for
             odds_df = self.api_client.get_todays_odds(target_date)
             
             if odds_df.empty:
                 logger.warning(f"No odds available for {target_date}")
                 return pd.DataFrame(), np.array([])
             
-            logger.info(f"Found odds for {len(odds_df)} players - generating predictions")
+            # Extract unique player names from odds
+            player_names = []
+            for _, row in odds_df.iterrows():
+                player_name = row.get('batter_name') or row.get('player_name')  # Check both columns
+                if player_name and player_name not in player_names:
+                    player_names.append(player_name)
             
-            # Load recent performance data
-            recent_data = self._load_recent_player_performance()
+            logger.info(f"Found odds for {len(player_names)} unique players")
             
-            if recent_data.empty:
-                logger.warning("No recent performance data available")
-                return pd.DataFrame(), np.array([])
-            
-            # Match today's players with their recent performance
-            feature_df = self._match_players_with_recent_performance(odds_df, recent_data)
+            # Build prediction dataset using recent historical data
+            feature_df = self.prediction_builder.build_todays_prediction_dataset(
+                target_players=player_names, target_date=target_date
+            )
             
             if feature_df.empty:
-                logger.warning(f"No player matches found for {target_date}")
+                logger.error("No recent performance data found")
                 return pd.DataFrame(), np.array([])
             
             # Generate predictions with specified model
-            logger.info(f"Making predictions for {len(feature_df)} players using {model_name}")
-            probabilities = self.model_system.predict_proba(
-                feature_df, model_name=model_name, prefer_enhanced=True
-            )
+            logger.info(f"Making predictions for {len(feature_df)} players using {self.model_type or model_name}")
+            
+            if self.model_type and self.model_type != "DualSystem":
+                # Use the best model from comparative analysis
+                # Ensure we have the required features
+                missing_features = [f for f in self.model_features if f not in feature_df.columns]
+                if missing_features:
+                    logger.warning(f"Missing {len(missing_features)} features required by model")
+                    # Add missing features with default values (0)
+                    for feature in missing_features:
+                        feature_df[feature] = 0
+                
+                # Select and order features as expected by the model
+                X = feature_df[self.model_features].values
+                
+                # Generate predictions
+                raw_probabilities = self.best_model.predict_proba(X)[:, 1]
+                
+                # Apply calibration for realistic probabilities
+                # LightGBM tends to overpredict, so we need to calibrate
+                probabilities = self._calibrate_probabilities(raw_probabilities)
+            else:
+                # Use old dual model system
+                probabilities = self.model_system.predict_proba(
+                    feature_df, model_name=model_name, prefer_enhanced=True
+                )
             
             # Apply calibration if available
             calibration_factor = self._load_calibration_factor()
@@ -133,7 +270,9 @@ class LivePredictionSystem:
             
             # Validate predictions
             if not self.validator.validate_predictions(probabilities):
-                if model_name == 'xgb':
+                if self.model_type and self.model_type != "DualSystem":
+                    raise ValueError("Best model predictions failed validation")
+                elif model_name == 'xgb':
                     logger.warning("XGBoost predictions failed, falling back to Random Forest")
                     probabilities = self.model_system.predict_proba(
                         feature_df, model_name='rf', prefer_enhanced=True
@@ -145,10 +284,31 @@ class LivePredictionSystem:
                 else:
                     raise ValueError("Generated predictions failed validation")
             
-            # Add odds data back to feature_df for merging
-            feature_df['odds_hr_yes'] = feature_df.get('odds_hr_yes', np.nan)
-            feature_df['odds_hr_no'] = feature_df.get('odds_hr_no', np.nan)
-            feature_df['bookmaker'] = feature_df.get('bookmaker', 'Unknown')
+            # Merge back with odds data to get bookmaker info
+            feature_df['hr_probability'] = probabilities
+            
+            # Merge with original odds data to preserve bookmaker information
+            if not odds_df.empty:
+                # Ensure both DataFrames have standardized player names
+                feature_df_with_odds = feature_df.merge(
+                    odds_df[['batter_name', 'odds_hr_yes', 'odds_hr_no', 'bookmaker']],
+                    on='batter_name',
+                    how='left',
+                    suffixes=('', '_from_odds')
+                )
+                
+                # Use odds data if available
+                if 'odds_hr_yes_from_odds' in feature_df_with_odds.columns:
+                    feature_df_with_odds['odds_hr_yes'] = feature_df_with_odds['odds_hr_yes_from_odds']
+                    feature_df_with_odds['odds_hr_no'] = feature_df_with_odds['odds_hr_no_from_odds']
+                    feature_df_with_odds = feature_df_with_odds.drop(columns=['odds_hr_yes_from_odds', 'odds_hr_no_from_odds'])
+                
+                feature_df = feature_df_with_odds
+            else:
+                # Fallback if no odds data available
+                feature_df['odds_hr_yes'] = feature_df.get('odds_hr_yes', np.nan)
+                feature_df['odds_hr_no'] = feature_df.get('odds_hr_no', np.nan)
+                feature_df['bookmaker'] = feature_df.get('bookmaker', 'Unknown')
             
             logger.info(f"Predictions generated successfully: {len(probabilities)} players")
             return feature_df, probabilities
@@ -222,6 +382,86 @@ class LivePredictionSystem:
         else:
             logger.warning("No players matched between odds and recent performance")
             return pd.DataFrame()
+    
+    def _calibrate_probabilities(self, probabilities: np.ndarray) -> np.ndarray:
+        """
+        Calibrate model probabilities using percentile mapping to preserve betting value.
+        
+        Args:
+            probabilities: Raw model probabilities
+            
+        Returns:
+            Calibrated probabilities
+        """
+        try:
+            # First check for better percentile calibration
+            percentile_path = self.model_dir / "calibration_params_percentile.json"
+            if percentile_path.exists():
+                with open(percentile_path, 'r') as f:
+                    params = json.load(f)
+                
+                # Apply percentile-based calibration
+                from scipy import stats
+                
+                mapping = params['mapping']
+                
+                # Calculate percentiles of the input probabilities
+                percentiles = stats.rankdata(probabilities, method='average') / len(probabilities) * 100
+                
+                # Create interpolation points
+                x_points = [0, 50, 75, 90, 95, 99, 100]
+                y_points = [
+                    mapping['percentile_0'],
+                    mapping['percentile_50'],
+                    mapping['percentile_75'],
+                    mapping['percentile_90'],
+                    mapping['percentile_95'],
+                    mapping['percentile_99'],
+                    mapping['percentile_99']  # Use same as 99th for 100th
+                ]
+                
+                # Interpolate calibrated values
+                calibrated = np.interp(percentiles, x_points, y_points)
+                
+                logger.info(f"Applied percentile calibration: avg {probabilities.mean():.3f} -> {calibrated.mean():.3f}, "
+                           f"range [{probabilities.min():.3f}-{probabilities.max():.3f}] -> [{calibrated.min():.3f}-{calibrated.max():.3f}]")
+                return calibrated
+            
+            # Fallback to old calibration if exists
+            calibration_path = self.model_dir / "calibration_params.json"
+            if calibration_path.exists():
+                with open(calibration_path, 'r') as f:
+                    params = json.load(f)
+                
+                # Apply logit transformation calibration
+                probs_clipped = np.clip(probabilities, 1e-7, 1-1e-7)
+                log_odds = np.log(probs_clipped / (1 - probs_clipped))
+                
+                calibration_factor = params.get('calibration_factor', 0.1)
+                log_odds_shift = params.get('log_odds_shift', -3.5)
+                
+                adjusted_log_odds = log_odds * calibration_factor + log_odds_shift
+                calibrated = 1 / (1 + np.exp(-adjusted_log_odds))
+                
+                logger.info(f"Applied old calibration: avg prob {probabilities.mean():.3f} -> {calibrated.mean():.3f}")
+                return calibrated
+            else:
+                # No calibration parameters, use percentile-based default
+                logger.warning("No calibration parameters found, applying default percentile mapping")
+                from scipy import stats
+                
+                # Simple percentile mapping to 5-30% range
+                percentiles = stats.rankdata(probabilities, method='average') / len(probabilities)
+                calibrated = 0.05 + (percentiles * 0.25)  # Maps to 5-30% range
+                
+                return calibrated
+                
+        except Exception as e:
+            logger.error(f"Calibration failed: {e}")
+            # Return percentile-based fallback
+            from scipy import stats
+            percentiles = stats.rankdata(probabilities, method='average') / len(probabilities)
+            return 0.05 + (percentiles * 0.25)
     
     def _load_calibration_factor(self) -> float:
         """Load calibration factor from saved data."""
@@ -331,27 +571,43 @@ class LivePredictionSystem:
         }
         
         try:
-            # Get betting opportunities
-            opportunities = self.get_todays_betting_opportunities(target_date)
-            results['opportunities'] = opportunities
-            
-            # Get prediction data for near-miss analysis
+            # Get predictions and odds ONCE and reuse them
+            logger.info("Generating predictions for analysis...")
             feature_df, probabilities = self.get_todays_predictions(target_date)
+            
+            if feature_df.empty:
+                logger.warning("No prediction data available")
+                results['errors'].append("No prediction data available")
+                return results
+            
+            logger.info("Fetching odds data...")
             odds_df = self.api_client.get_todays_odds(target_date)
             
-            if not feature_df.empty and not odds_df.empty:
-                # Analyze near-misses
-                merged_df = self.betting_analyzer.merge_predictions_with_odds(
-                    feature_df, probabilities, odds_df
-                )
-                
-                near_misses = self.betting_analyzer.generate_near_miss_analysis(merged_df)
-                results['near_misses'] = near_misses
-                
-                # Calculate summary statistics
-                results['summary_stats'] = self._calculate_summary_stats(
-                    merged_df, opportunities
-                )
+            if odds_df.empty:
+                logger.warning("No odds data available")
+                results['errors'].append("No odds data available")
+                return results
+            
+            # Merge predictions with odds
+            logger.info("Analyzing betting opportunities...")
+            merged_df = self.betting_analyzer.merge_predictions_with_odds(
+                feature_df, probabilities, odds_df
+            )
+            
+            # Identify opportunities
+            opportunities = self.betting_analyzer.identify_betting_opportunities(merged_df)
+            results['opportunities'] = opportunities
+            logger.info(f"Found {len(opportunities)} betting opportunities")
+            
+            # Get near-miss analysis using the same merged data
+            # (Already have merged_df from above, no need to re-merge)
+            near_misses = self.betting_analyzer.generate_near_miss_analysis(merged_df)
+            results['near_misses'] = near_misses
+            
+            # Calculate summary statistics
+            results['summary_stats'] = self._calculate_summary_stats(
+                merged_df, opportunities
+            )
             
             results['success'] = True
             
@@ -534,3 +790,57 @@ def create_live_system(api_key: str = None, model_dir: str = None) -> LivePredic
 __all__ = [
     'LivePredictionSystem', 'ScheduledPredictionRunner', 'create_live_system'
 ]
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Run MLB home run predictions')
+    parser.add_argument('--min-ev', type=float, default=0.05, help='Minimum expected value for betting opportunities')
+    parser.add_argument('--min-confidence', type=float, default=0.70, help='Minimum confidence for recommendations')
+    parser.add_argument('--date', type=str, default=None, help='Target date (YYYY-MM-DD), defaults to today')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    
+    args = parser.parse_args()
+    
+    # Setup logging
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    try:
+        print("🚀 Starting MLB Home Run Prediction System...")
+        
+        # Create and initialize system
+        live_system = create_live_system()
+        
+        # Update betting analyzer thresholds
+        live_system.betting_analyzer.min_ev = args.min_ev
+        live_system.betting_analyzer.min_confidence = args.min_confidence
+        
+        print(f"📊 Settings: Min EV={args.min_ev:.1%}, Min Confidence={args.min_confidence:.1%}")
+        
+        # Run analysis
+        target_date = args.date if args.date else datetime.now().strftime("%Y-%m-%d")
+        print(f"📅 Analyzing games for {target_date}")
+        
+        results = live_system.run_full_analysis(target_date=target_date, print_results=True)
+        
+        if results.get('success'):
+            opportunities = results.get('opportunities', [])
+            if opportunities:
+                print(f"\n💰 Found {len(opportunities)} betting opportunities!")
+            else:
+                print("\n📋 No qualifying betting opportunities found today.")
+                print("💡 Try lowering --min-ev or --min-confidence thresholds")
+        else:
+            print("\n❌ Analysis failed. Check logs for details.")
+            if results.get('errors'):
+                for error in results['errors']:
+                    print(f"   Error: {error}")
+        
+    except Exception as e:
+        print(f"❌ System failed to start: {e}")
+        if args.debug:
+            import traceback
+            traceback.print_exc()

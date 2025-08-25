@@ -371,8 +371,9 @@ class FeatureSelector:
         available_interactions = [col for col in self.interaction_features if col in available_numeric]
         available_interactions = list(dict.fromkeys(available_interactions))
         
-        # Enhanced features = core + bat tracking + matchup + situational + weather + recent form + streak momentum + ballpark + temporal fatigue + interactions
-        available_enhanced = (available_core + available_bt + available_matchup + 
+        # Enhanced features = ALL available features (core + matchup + situational + weather + recent form + streak momentum + ballpark + temporal fatigue + interactions)
+        # No longer requires bat tracking features specifically
+        available_enhanced = (available_core + available_matchup + 
                             available_situational + available_weather + available_recent_form + 
                             available_streak_momentum + available_ballpark + available_temporal_fatigue +
                             available_interactions)
@@ -392,28 +393,28 @@ class FeatureSelector:
             'all_numeric': available_numeric
         }
     
-    def assess_bat_tracking_coverage(self, df: pd.DataFrame, threshold: float = 0.1) -> Dict[str, Any]:
-        """Assess bat tracking data coverage."""
+    def assess_enhanced_feature_coverage(self, df: pd.DataFrame, threshold: float = 0.1) -> Dict[str, Any]:
+        """Assess enhanced feature data coverage - no longer requires bat tracking."""
         feature_info = self.identify_available_features(df)
-        bt_features = feature_info['bat_tracking']
+        enhanced_features = feature_info['enhanced']
         
-        if not bt_features:
+        if not enhanced_features:
             return {
                 'sufficient': False,
                 'coverage': 0.0,
                 'available_features': [],
-                'reason': 'No bat tracking features found'
+                'reason': 'No enhanced features found'
             }
         
-        # Check coverage across bat tracking features
-        bt_data = df[bt_features]
-        non_null_rows = bt_data.notna().any(axis=1).sum()
+        # Check coverage across enhanced features
+        enhanced_data = df[enhanced_features]
+        non_null_rows = enhanced_data.notna().any(axis=1).sum()
         coverage = non_null_rows / len(df)
         
         return {
             'sufficient': coverage >= threshold,
             'coverage': coverage,
-            'available_features': bt_features,
+            'available_features': enhanced_features,
             'reason': f'Coverage {coverage:.2%} (threshold: {threshold:.2%})'
         }
 
@@ -609,7 +610,8 @@ class EnhancedDualModelSystem:
             val_size: float = 0.1,
             gap_days: int = 0,
             test_seasons: List[int] = None,
-            cross_validate: bool = True) -> Dict[str, Any]:
+            cross_validate: bool = True,
+            cv_folds: int = 5) -> Dict[str, Any]:
         """
         Enhanced training with proper data splitting and validation.
         
@@ -621,6 +623,7 @@ class EnhancedDualModelSystem:
             gap_days: Days gap between splits (time_based only)
             test_seasons: Specific seasons for test (seasonal only)
             cross_validate: Whether to perform cross-validation
+            cv_folds: Number of cross-validation folds
         
         Returns:
             Training results and metrics
@@ -652,11 +655,11 @@ class EnhancedDualModelSystem:
         
         # Analyze available features
         self.available_features = self.feature_selector.identify_available_features(train_data)
-        bt_assessment = self.feature_selector.assess_bat_tracking_coverage(train_data)
+        enhanced_assessment = self.feature_selector.assess_enhanced_feature_coverage(train_data)
         
         logger.info(f"Core features available: {len(self.available_features['core'])}")
         logger.info(f"Enhanced features available: {len(self.available_features['enhanced'])}")
-        logger.info(f"Bat tracking assessment: {bt_assessment['reason']}")
+        logger.info(f"Enhanced feature assessment: {enhanced_assessment['reason']}")
         
         training_results = {
             'split_strategy': splitting_strategy,
@@ -665,7 +668,7 @@ class EnhancedDualModelSystem:
             'test_size': len(test_data),
             'core_features': self.available_features['core'],
             'enhanced_features': self.available_features['enhanced'],
-            'bt_assessment': bt_assessment
+            'enhanced_assessment': enhanced_assessment
         }
         
         # Train core model
@@ -680,8 +683,8 @@ class EnhancedDualModelSystem:
             )
             training_results['core_val_metrics'] = core_val_metrics
         
-        # Train enhanced model if sufficient bat tracking data
-        if bt_assessment['sufficient']:
+        # Train enhanced model if we have more features than core
+        if len(self.available_features['enhanced']) > len(self.available_features['core']):
             logger.info("\nTraining ENHANCED model...")
             self.enhanced_model = BaseModelComponent(self.available_features['enhanced'])
             self.enhanced_model.train(train_data)
@@ -693,7 +696,7 @@ class EnhancedDualModelSystem:
                 )
                 training_results['enhanced_val_metrics'] = enhanced_val_metrics
         else:
-            logger.info(f"\nSkipping enhanced model: {bt_assessment['reason']}")
+            logger.info(f"\nSkipping enhanced model: No additional features beyond core ({len(self.available_features['enhanced'])} vs {len(self.available_features['core'])})")
             self.enhanced_model = None
         
         # Fit calibration on validation data
@@ -707,7 +710,7 @@ class EnhancedDualModelSystem:
         
         # Cross-validation if requested
         if cross_validate and len(train_df) > 1000:  # Only for reasonable dataset sizes
-            cv_results = self._perform_cross_validation(train_df)
+            cv_results = self._perform_cross_validation(train_df, n_splits=cv_folds)
             training_results['cv_results'] = cv_results
         
         # Store training metadata
@@ -861,6 +864,43 @@ class EnhancedDualModelSystem:
         
         return predictions
     
+    def predict(self, df: pd.DataFrame, model_name: str = 'xgb', 
+                prefer_enhanced: bool = True, threshold: float = 0.15) -> np.ndarray:
+        """Generate binary predictions using the best available model.
+        
+        Args:
+            df: Input features
+            model_name: Model to use ('xgb', 'rf', 'lgb')
+            prefer_enhanced: Whether to prefer enhanced model over core
+            threshold: Classification threshold (default 0.5)
+            
+        Returns:
+            Binary predictions (0 or 1)
+        """
+        probabilities = self.predict_proba(df, model_name, prefer_enhanced)
+        # Get probability of positive class (home run)
+        if probabilities.ndim == 2:
+            probabilities = probabilities[:, 1]
+        return (probabilities >= threshold).astype(int)
+    
+    def _calculate_metrics(self, y_true: np.ndarray, y_pred: np.ndarray, 
+                          y_prob: np.ndarray = None) -> Dict[str, float]:
+        """Calculate comprehensive metrics for model evaluation.
+        
+        Args:
+            y_true: True labels
+            y_pred: Predicted labels
+            y_prob: Predicted probabilities (optional)
+            
+        Returns:
+            Dictionary of metrics
+        """
+        # If probabilities not provided, assume uniform probability of 0.5 for all predictions
+        if y_prob is None:
+            y_prob = np.where(y_pred == 1, 0.6, 0.4)  # Simple approximation
+        
+        return ModelValidator.evaluate_model_performance(y_true, y_pred, y_prob)
+    
     def _can_use_enhanced_model(self, df: pd.DataFrame) -> bool:
         """Check if enhanced model can be used with given data."""
         if self.enhanced_model is None:
@@ -873,12 +913,11 @@ class EnhancedDualModelSystem:
         ]
         
         if missing_features:
-            logger.warning(f"Enhanced model requires missing features: {missing_features}")
+            logger.warning(f"Enhanced model requires missing features: {missing_features[:10]}...")
             return False
         
-        # Check bat tracking data coverage
-        bt_assessment = self.feature_selector.assess_bat_tracking_coverage(df, threshold=0.05)
-        return bt_assessment['sufficient']
+        # No longer requires bat tracking coverage - just check if features are available
+        return True
     
     def evaluate_comprehensive(self, df: pd.DataFrame, label: str = "Evaluation") -> Dict[str, Any]:
         """Comprehensive evaluation with multiple metrics."""
@@ -1028,6 +1067,30 @@ class EnhancedDualModelSystem:
         except Exception as e:
             logger.error(f"Failed to load models: {e}")
             raise
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get information about the loaded models."""
+        info = {
+            'core_model_loaded': self.core_model is not None,
+            'enhanced_model_loaded': self.enhanced_model is not None,
+            'core_features_count': len(self.available_features.get('core', [])),
+            'enhanced_features_count': len(self.available_features.get('enhanced', [])),
+            'metadata': self.metadata,
+            'training_history': self.training_history
+        }
+        
+        # Add model type information
+        if self.enhanced_model is not None:
+            info['active_model'] = 'enhanced'
+            info['active_feature_count'] = info['enhanced_features_count']
+        elif self.core_model is not None:
+            info['active_model'] = 'core'
+            info['active_feature_count'] = info['core_features_count']
+        else:
+            info['active_model'] = 'none'
+            info['active_feature_count'] = 0
+        
+        return info
 
 # Backward compatibility - replace the original DualModelSystem
 DualModelSystem = EnhancedDualModelSystem
